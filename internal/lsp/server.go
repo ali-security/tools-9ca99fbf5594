@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 
 	"golang.org/x/tools/internal/jsonrpc2"
@@ -44,7 +45,7 @@ func RunServerOnPort(ctx context.Context, cache source.Cache, port int, h func(s
 // RunServerOnPort starts an LSP server on the given port and does not exit.
 // This function exists for debugging purposes.
 func RunServerOnAddress(ctx context.Context, cache source.Cache, addr string, h func(s *Server)) error {
-	ln, err := net.Listen("tcp", addr)
+	ln, err := listen(addr)
 	if err != nil {
 		return err
 	}
@@ -58,6 +59,18 @@ func RunServerOnAddress(ctx context.Context, cache source.Cache, addr string, h 
 		h(s)
 		go s.Run(ctx)
 	}
+}
+
+// listen opens a TCP listener on addr. An address with no host, such as
+// ":8080", is bound to localhost rather than to all network interfaces, so
+// that the debugging server is not reachable from other machines
+// (CVE-2026-42503). Pass an explicit host such as 0.0.0.0 to listen on all
+// interfaces.
+func listen(addr string) (net.Listener, error) {
+	if strings.HasPrefix(addr, ":") {
+		addr = "localhost" + addr
+	}
+	return net.Listen("tcp", addr)
 }
 
 func (s *Server) Run(ctx context.Context) error {
